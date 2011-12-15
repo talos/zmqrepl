@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+
+# zmqrepl -- a zmq repl
+# Copyright (C) 2011  John Krauss
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+try:
+    import zmq
+except ImportError:
+    print "You must install zmq to use zmqrepl."
+    exit(0)
+from functools import wraps  # wrrapppppidooooooo
+import urlparse
+import cmd
+import sys
+import ast
+import pprint
+import readline
+
+if len(sys.argv) > 1:
+    DEFAULT_ADDR = sys.argv[1]
+else:
+    DEFAULT_ADDR = 'tcp://localhost:5555'
+
+class Requepl(cmd.Cmd):
+    """Requepl provides an HTTP repl with multiple sessions.
+    """
+
+    pp = pprint.PrettyPrinter(indent=2)
+    intro = "***A repl for zmq. Type `help` for a list of commands."
+
+    # TODO: only does REQ right now.
+    sock = zmq.Context.instance().socket(zmq.REQ)
+
+    def preloop(self):
+        """Initialize default session.
+        """
+        # OS X Lion whyyyy
+        if 'libedit' in readline.__doc__ or sys.platform == 'darwin':
+            self.completekey = None # disable cmd.Cmd's default
+                                    # complete binding
+            self.old_completer = readline.get_completer()
+            readline.set_completer(self.complete)
+            readline.parse_and_bind("bind ^I rl_complete")
+
+        self.do_bind(DEFAULT_ADDR)
+
+    @property
+    def prompt(self):
+        """Generate prompt with the current session.
+        """
+        return "%s> " % self.addr
+
+    def default(self, line):
+        """Show help on unknown line.
+        """
+        print 'Unrecognized command: "%s"' % line
+        self.do_help('help')
+
+    def emptyline(self):
+        """Show nothing on empty line.
+        """
+        pass
+
+    def do_bind(self, line):
+        """Connect the REPL to another address.
+        """
+        self.sock.connect(line)
+        self.addr = line
+
+    def do_send(self, line):
+        """Send some data. Blocks until response comes, and prints it.
+        """
+        self.sock.send(line + '\00')
+        print self.sock.recv()
+
+    def help_help(self):
+        """Take `help` off the list of undocumented commands.
+        """
+        self.do_help('')
+
+    def do_exit(self, line):
+        """
+        Exit Requepl.
+        """
+        return True
+
+    def do_quit(self, line):
+        """
+        Exit Requepl.
+        """
+        return True
+
+    def do_EOF(self, line):
+        """Exit the repl.
+        """
+        print ''
+        return True
+
+if __name__ == '__main__':
+    try:
+        Requepl().cmdloop()
+    except KeyboardInterrupt:
+        print ''
